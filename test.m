@@ -30,11 +30,42 @@ end
 imageData = fread(fid, [width, height], 'uint16');
 fclose(fid);
 
-% 显示灰度图
+% 显示原始灰度图
 figure;
 imshow(imageData', []);
 colormap gray;
-title(sprintf('灰度图像 (尺寸: %d x %d)', width, height));
+title(sprintf('原始图像 (尺寸: %d x %d)', width, height));
+
+% 粗略筛选出带的部分
+is_belt = ((imageData >= 60000) .* (imageData < 65535));
+
+figure;
+imshow(is_belt', []);
+colormap gray;
+
+% 细致筛选
+x_sum = sum(is_belt, 2); % 沿运动方向求和
+[rows, cols, ~] = find(is_belt);
+for i = 1:length(rows)
+    row = rows(i);
+    col = cols(i);
+    if sum(is_belt(row, max(col-25, 1):min((col+25), height))) < 10
+        is_belt(row, col) = 0;
+    end
+end
+
+figure;
+imshow(is_belt', []);
+colormap gray;
+
+[~, cols, ~] = find(is_belt);
+% 统计出现最多的col值并据此最后筛选
+is_belt(:, 1:max(mode(cols)-25, 1)) = 0;
+is_belt(:, min(mode(cols)+25, height):height) = 0;
+
+[~, cols, ~] = find(is_belt);
+min_col = min(cols);
+max_col = max(cols);
 
 % 获取纵向灰度差值
 y_diff = diff(imageData, 1, 1);
@@ -42,19 +73,34 @@ y_diff = abs(y_diff);
 
 % 过滤过小的差值
 diff_max = max(y_diff(:));
-threshold = 0.3 * diff_max;
+threshold = 0.22 * diff_max;
 diff_filtered = y_diff .* (y_diff > threshold);
 
-% 确定边界
-[rows, ~, ~] = find(diff_filtered);
-min_row = min(rows);
-max_row = max(rows);
-
-% 截取
-imageData_cut = imageData(min_row:max_row, :);
-
-% 显示灰度图
 figure;
-imshow(imageData_cut', []);
+imshow(diff_filtered', []);
 colormap gray;
-title(sprintf('灰度图像 (尺寸: %d x %d)', width, height));
+
+% 确定边界
+[edge_rows, edge_cols, ~] = find(diff_filtered);
+valid_indices = edge_cols >= min_col & edge_cols <= max_col;
+if any(valid_indices)
+    filtered_rows = edge_rows(valid_indices);
+    filtered_cols = edge_cols(valid_indices);
+    [unique_cols, ~, ic] = unique(filtered_cols);
+    min_rows = accumarray(ic, filtered_rows, [], @min);
+    sorted_min_rows = sort(min_rows);
+    n = numel(sorted_min_rows);
+    keep_start = max(floor(0.3 * n) + 1, 1);  % 确保至少保留1个点
+    keep_end = min(n - floor(0.3 * n), n);    % 确保不越界
+    robust_min_rows = sorted_min_rows(keep_start:keep_end);
+    mean_row = mean(robust_min_rows);
+    imageData(1:floor(mean_row)-50, min_col:max_col) = 65535;
+else
+    imageData(:, min_col:max_col) = 65535;
+end
+
+% 显示处理后的灰度图
+figure;
+imshow(imageData', []);
+colormap gray;
+title(sprintf('处理后图像 (尺寸: %d x %d)', width, height));
