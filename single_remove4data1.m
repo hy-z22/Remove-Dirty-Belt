@@ -1,8 +1,5 @@
-% DR脏带去除
-clc; clear; close all;
-
-% 文件路径
-filepath = 'data2\002046_1800x758.raw';
+% 单个DR脏带去除
+function single_remove4data1(filepath)
 
 % 从文件路径中提取文件名
 [~, filename, ~] = fileparts(filepath);
@@ -30,8 +27,11 @@ end
 imageData = fread(fid, [width, height], 'uint16');
 fclose(fid);
 
+% 创建图窗
+fig = figure('Visible', 'off');
+
 % 显示原始灰度图
-figure;
+subplot(1,2,1);
 imshow(imageData', []);
 colormap gray;
 title(sprintf('原始图像 (尺寸: %d x %d)', width, height));
@@ -62,33 +62,17 @@ for i = 1:width
     end
 end
 
-% 显示粗略边界分布
-figure;
-imshow(is_boundary', []);
-colormap gray;
-title(sprintf('粗略边界分布 (尺寸: %d x %d)', width, height));
-
-is_object = imageData<57000;
-% 显示粗略物体分布
-figure;
-imshow(is_object', []);
-colormap gray;
-title(sprintf('粗略物体分布 (尺寸: %d x %d)', width, height));
+is_object = imageData<45000;
 
 % 结合粗略物体分布修正边界分布
 [edge_x, edge_y] = find(is_boundary);
 for k = 1:length(edge_x)
     x = edge_x(k);
     y = edge_y(k);
-    if sum(is_object(max(x-30, 1):min(x+30, width), max(y-30, 1):min(y+30, height))) == 0
+    if sum(is_object(max(x-100, 1):min(x+100, width), max(y-100, 1):min(y+100, height))) == 0
         is_boundary(x, y) = 0;
     end
 end
-
-figure;
-imshow(is_boundary', []);
-colormap gray;
-title(sprintf('修正后边界分布 (尺寸: %d x %d)', width, height));
 
 for j = 1:height
     internal = find(is_boundary(:, j));
@@ -102,7 +86,17 @@ for j = 1:height
     end
 end
 
-figure;
+% 显示处理后的灰度图
+subplot(1,2,2);
 imshow(imageData', []);
 colormap gray;
 title(sprintf('处理后图像 (尺寸: %d x %d)', width, height));
+
+% 调整子图间距
+set(fig, 'Position', [180, 120, 1200, 600]); % 调整图窗大小
+
+output_path = fullfile('result1', [filename '_comparison.png']);
+saveas(fig, output_path);
+fprintf('处理结果已保存到: %s\n', output_path);
+
+end
