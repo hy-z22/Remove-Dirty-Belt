@@ -62,29 +62,52 @@ for i = 1:width
     end
 end
 
-is_object = imageData<57000;
-
-% 结合粗略物体分布修正边界分布
-[edge_x, edge_y] = find(is_boundary);
-for k = 1:length(edge_x)
-    x = edge_x(k);
-    y = edge_y(k);
-    if sum(is_object(max(x-30, 1):min(x+30, width), max(y-30, 1):min(y+30, height))) == 0
-        is_boundary(x, y) = 0;
+% 根据运动方向的宽窄粗略判断是否是脏带边界
+is_belt = zeros(width, height);
+for i = 1:width
+    y_range = find(is_boundary(i, :));
+    if isempty(y_range) == 0
+        y_min = min(y_range);
+        y_max = max(y_range);
+        delta_y = y_max - y_min;
+        if delta_y < 40
+            is_belt(i, y_min: y_max) = 1;
+        end
     end
 end
 
-for j = 1:height
-    internal = find(is_boundary(:, j));
-    if isempty(internal)
-        imageData(:, j) = 65535;
-    else
-        left = min(internal);
-        right = max(internal);
-        imageData(1:left-1, j) = 65535;
-        imageData(right+1:width, j) = 65535;
-    end
-end
+imageData(logical(is_belt)) = 65535;
+
+% 生成二值化掩膜
+is_object = imageData ~= 65535;
+
+% 统计连通区域（8连通）
+CC = bwconncomp(is_object, 8); 
+numRegions = CC.NumObjects;
+fprintf('连通区域数量: %d\n', numRegions);
+
+% 计算每个连通区域的面积
+stats = regionprops(CC, 'Area');
+areas = [stats.Area];
+
+% 找到面积最大的区域索引
+[~, maxIdx] = max(areas);
+
+% 创建只保留最大区域的掩膜
+maxRegionMask = false(size(is_object));
+maxRegionMask(CC.PixelIdxList{maxIdx}) = true;
+
+% 计算最大区域的边界
+maxRegionBoundary = bwperim(maxRegionMask, 8);
+
+% 计算最大区域掩膜（包括边界）
+maxRegionMask = maxRegionMask + maxRegionBoundary;
+maxRegionMask = logical(maxRegionMask);
+
+% 创建结果图像
+resultImage = 65535 * ones(size(imageData), 'uint16');
+resultImage(maxRegionMask) = imageData(maxRegionMask);
+imageData = resultImage;
 
 % 显示处理后的灰度图
 subplot(1,2,2);
