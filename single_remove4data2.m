@@ -36,78 +36,120 @@ imshow(imageData', []);
 colormap gray;
 title(sprintf('原始图像 (尺寸: %d x %d)', width, height));
 
-is_boundary = false(width, height); % 初始化边界标签矩阵
-
-% 定义8邻域偏移量（包括上下左右和对角线）
-neighbors = [-1 -1; -1 0; -1 1; 0 -1; 0 1; 1 -1; 1 0; 1 1];
-
-for i = 1:width
-    for j = 1:height
-        % 只处理自身不为白的点
-        if imageData(i, j) ~= 65535
-            % 检查所有相邻像素
-            for k = 1:size(neighbors, 1)
-                ni = i + neighbors(k, 1);
-                nj = j + neighbors(k, 2);
-                
-                % 确保相邻像素在图像范围内
-                if ni >= 1 && ni <= width && nj >= 1 && nj <= height
-                    if imageData(ni, nj) == 65535
-                        is_boundary(i, j) = true;
-                        break; % 找到一个满足条件的相邻点即可
-                    end
-                end
-            end
-        end
-    end
-end
-
-% 根据运动方向的宽窄粗略判断是否是脏带边界
-is_belt = zeros(width, height);
-for i = 1:width
-    y_range = find(is_boundary(i, :));
-    if isempty(y_range) == 0
-        y_min = min(y_range);
-        y_max = max(y_range);
-        delta_y = y_max - y_min;
-        if delta_y < 40
-            is_belt(i, y_min: y_max) = 1;
-        end
-    end
-end
-
-imageData(logical(is_belt)) = 65535;
-
-% 生成二值化掩膜
 is_object = imageData ~= 65535;
 
-% 统计连通区域（8连通）
-CC = bwconncomp(is_object, 8); 
-numRegions = CC.NumObjects;
-fprintf('连通区域数量: %d\n', numRegions);
+is_boundary = zeros(width, height);
+for j = 1:height
+    % 找出可能的边界
+    is_boundary(2:end-1, j) = (is_object(2:end-1, j) ~= 0) & ... % 本身非0
+                ((is_object(1:end-2, j) == 0) | ... % 左0
+                 (is_object(3:end, j) == 0)); % 右0
+end
 
-% 计算每个连通区域的面积
-stats = regionprops(CC, 'Area');
-areas = [stats.Area];
+boundary_num = sum(is_boundary);
 
-% 找到面积最大的区域索引
-[~, maxIdx] = max(areas);
+% 左右极限位置
+boundary = zeros(2, height);
+for j = 1:height
+    indices = find(is_object(:, j));
+    if ~isempty(indices)
+        boundary(1, j) = min(indices);
+        boundary(2, j) = max(indices);
+    else
+        boundary(:, j) = NaN;
+    end
+end
 
-% 创建只保留最大区域的掩膜
-maxRegionMask = false(size(is_object));
-maxRegionMask(CC.PixelIdxList{maxIdx}) = true;
+% 极限位置的一阶导
+left_diff = diff(boundary(1, :));
+right_diff = diff(boundary(2, :));
+left_first_order = ([NaN, left_diff] + [left_diff, NaN]) / 2;
+right_first_order = ([NaN, right_diff] + [right_diff, NaN]) / 2;
+first_order = abs(left_first_order) + abs(right_first_order);
 
-% 计算最大区域的边界
-maxRegionBoundary = bwperim(maxRegionMask, 8);
+% 边界数与一阶导的乘积
+multiply = boundary_num .* first_order;
 
-% 计算最大区域掩膜（包括边界）
-maxRegionMask = maxRegionMask + maxRegionBoundary;
-maxRegionMask = logical(maxRegionMask);
+% 找到一个脏带范围内的纵坐标
+pin = find(multiply == max(multiply));
 
-% 创建结果图像
-resultImage = 65535 * ones(size(imageData), 'uint16');
-resultImage(maxRegionMask) = imageData(maxRegionMask);
-imageData = resultImage;
+top_edge = NaN;
+btm_edge = NaN;
+
+% 寻找脏带的上下边界
+for j= pin:-1:1+10
+    if (sum(~(multiply(j-10:j-1) < 100)) == 0) || ((sum(~(boundary_num(j-7:j-1) == 2)) == 0) && (sum(~(multiply(j-5:j-1) < 100)) == 0))
+        top_edge = j;
+        break;
+    else
+        j = j-1;
+    end
+end
+
+for j= pin:height-10
+    if (sum(~(multiply(j+1:j+10) < 100)) == 0) || ((sum(~(boundary_num(j+1:j+7) == 2)) == 0) && (sum(~(multiply(j+1:j+5) < 100)) == 0))
+        btm_edge = j;
+        break;
+    else
+        j = j+1;
+    end
+end
+
+% 既找到上边界又找到下边界
+if ~isnan(top_edge) && ~isnan(btm_edge)
+    % 左边
+    for j = top_edge-2:btm_edge+2
+        i = boundary(1, top_edge-3) + (j - top_edge + 3) / (btm_edge - top_edge + 6) * (boundary(1, btm_edge+3) - boundary(1, top_edge-3));
+        i = floor(i);
+        i = max(i, 1);
+        i = min(i, width);
+        imageData(1:i, j) = 65535;
+    end
+    % 右边
+    for j = top_edge-2:btm_edge+2
+        i = boundary(2, top_edge-3) + (j - top_edge + 3) / (btm_edge - top_edge + 6) * (boundary(2, btm_edge+3) - boundary(2, top_edge-3));
+        i = ceil(i);
+        i = max(i, 1);
+        i = min(i, width);
+        imageData(i: width, j) = 65535;
+    end
+else
+    if isnan(top_edge) % 只找到下边界
+        % 左边
+        for j = 1:btm_edge+2
+            i = boundary(1, btm_edge+3) + (j - btm_edge - 3) * (boundary(1, btm_edge+4) - boundary(1, btm_edge+3));
+            i = floor(i);
+            i = max(i, 1);
+            i = min(i, width);
+            imageData(1:i, j) = 65535; 
+        end
+        % 右边
+        for j = 1:btm_edge+2
+            i = boundary(2, btm_edge+3) + (j - btm_edge - 3) * (boundary(2, btm_edge+4) - boundary(2, btm_edge+3));
+            i = ceil(i);
+            i = max(i, 1);
+            i = min(i, width);
+            imageData(i: width, j) = 65535; 
+        end
+    else % 只找到上边界
+        % 左边
+        for j = top_edge-2:height
+            i = boundary(1, top_edge-4) + (j - top_edge + 4) * (boundary(1, top_edge-3) - boundary(1, top_edge-4));
+            i = floor(i);
+            i = max(i, 1);
+            i = min(i, width);
+            imageData(1:i, j) = 65535; 
+        end
+        % 右边
+        for j = top_edge-2:height
+            i = boundary(2, top_edge-4) + (j - top_edge + 4) * (boundary(2, top_edge-3) - boundary(2, top_edge-4));
+            i = ceil(i);
+            i = max(i, 1);
+            i = min(i, width);
+            imageData(i: width, j) = 65535;
+        end
+    end
+end
 
 % 显示处理后的灰度图
 subplot(1,2,2);
