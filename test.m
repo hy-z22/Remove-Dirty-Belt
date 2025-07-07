@@ -128,64 +128,22 @@ end
 % 既找到上边界又找到下边界
 if ~isnan(top_edge) && ~isnan(btm_edge)
     % 左边
-    for j = top_edge-2:btm_edge+2
-        if abs(boundary(1, btm_edge+3) - boundary(1, top_edge-3)) < 100
-            i = boundary(1, top_edge-3) + (j - top_edge + 3) / (btm_edge - top_edge + 6) * (boundary(1, btm_edge+3) - boundary(1, top_edge-3));
-            i = floor(i);
-            i = max(i, 1);
-            i = min(i, width);
-        else
-            i = min(boundary(1, btm_edge+3), boundary(1, top_edge-3));
-        end
-        imageData(1:i, j) = 65535;
-    end
+    i = min(boundary(1, btm_edge+3), boundary(1, top_edge-3));
+    imageData(1:i, top_edge-2:btm_edge+2) = 65535;
     % 右边
-    for j = top_edge-2:btm_edge+2
-        if abs(boundary(2, btm_edge+3) - boundary(2, top_edge-3)) < 100
-            i = boundary(2, top_edge-3) + (j - top_edge + 3) / (btm_edge - top_edge + 6) * (boundary(2, btm_edge+3) - boundary(2, top_edge-3));
-            i = ceil(i);
-            i = max(i, 1);
-            i = min(i, width);
-        else
-            i = max(boundary(2, btm_edge+3), boundary(2, top_edge-3));
-        end
-        imageData(i: width, j) = 65535;
-    end
+    i = max(boundary(2, btm_edge+3), boundary(2, top_edge-3));
+    imageData(i: width, top_edge-2:btm_edge+2) = 65535;
 else
     if isnan(top_edge) % 只找到下边界
         % 左边
-        for j = 1:btm_edge+2
-            i = boundary(1, btm_edge+3) + (j - btm_edge - 3) * (boundary(1, btm_edge+4) - boundary(1, btm_edge+3));
-            i = floor(i);
-            i = max(i, 1);
-            i = min(i, width);
-            imageData(1:i, j) = 65535; 
-        end
+        imageData(1:boundary(1, btm_edge+3), 1:btm_edge+2) = 65535; 
         % 右边
-        for j = 1:btm_edge+2
-            i = boundary(2, btm_edge+3) + (j - btm_edge - 3) * (boundary(2, btm_edge+4) - boundary(2, btm_edge+3));
-            i = ceil(i);
-            i = max(i, 1);
-            i = min(i, width);
-            imageData(i: width, j) = 65535; 
-        end
+        imageData(boundary(2, btm_edge+3): width, 1:btm_edge+2) = 65535;
     else % 只找到上边界
         % 左边
-        for j = top_edge-2:height
-            i = boundary(1, top_edge-4) + (j - top_edge + 4) * (boundary(1, top_edge-3) - boundary(1, top_edge-4));
-            i = floor(i);
-            i = max(i, 1);
-            i = min(i, width);
-            imageData(1:i, j) = 65535; 
-        end
+        imageData(1:boundary(1, top_edge-3), top_edge-2:height) = 65535;
         % 右边
-        for j = top_edge-2:height
-            i = boundary(2, top_edge-4) + (j - top_edge + 4) * (boundary(2, top_edge-3) - boundary(2, top_edge-4));
-            i = ceil(i);
-            i = max(i, 1);
-            i = min(i, width);
-            imageData(i: width, j) = 65535;
-        end
+        imageData(boundary(2, top_edge-3): width, top_edge-2:height) = 65535;
     end
 end
 
