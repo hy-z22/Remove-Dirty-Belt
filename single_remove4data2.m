@@ -77,8 +77,8 @@ top_edge = NaN;
 btm_edge = NaN;
 
 % 寻找脏带的上下边界
-for j= pin:-1:1+10
-    if (sum(~(multiply(j-10:j-1) < 100)) == 0) || ((sum(~(boundary_num(j-7:j-1) == 2)) == 0) && (sum(~(multiply(j-5:j-1) < 100)) == 0))
+for j= pin:-1:1+15
+    if (sum(~(multiply(j-15:j-1) < 100)) == 0) || ((sum(~(boundary_num(j-7:j-1) == 2)) == 0) && (sum(~(multiply(j-5:j-1) < 100)) == 0))
         top_edge = j;
         break;
     else
@@ -86,8 +86,8 @@ for j= pin:-1:1+10
     end
 end
 
-for j= pin:height-10
-    if (sum(~(multiply(j+1:j+10) < 100)) == 0) || ((sum(~(boundary_num(j+1:j+7) == 2)) == 0) && (sum(~(multiply(j+1:j+5) < 100)) == 0))
+for j= pin:height-15
+    if (sum(~(multiply(j+1:j+15) < 100)) == 0) || ((sum(~(boundary_num(j+1:j+7) == 2)) == 0) && (sum(~(multiply(j+1:j+5) < 100)) == 0))
         btm_edge = j;
         break;
     else
@@ -99,18 +99,26 @@ end
 if ~isnan(top_edge) && ~isnan(btm_edge)
     % 左边
     for j = top_edge-2:btm_edge+2
-        i = boundary(1, top_edge-3) + (j - top_edge + 3) / (btm_edge - top_edge + 6) * (boundary(1, btm_edge+3) - boundary(1, top_edge-3));
-        i = floor(i);
-        i = max(i, 1);
-        i = min(i, width);
+        if abs(boundary(1, btm_edge+3) - boundary(1, top_edge-3)) < 100
+            i = boundary(1, top_edge-3) + (j - top_edge + 3) / (btm_edge - top_edge + 6) * (boundary(1, btm_edge+3) - boundary(1, top_edge-3));
+            i = floor(i);
+            i = max(i, 1);
+            i = min(i, width);
+        else
+            i = min(boundary(1, btm_edge+3), boundary(1, top_edge-3));
+        end
         imageData(1:i, j) = 65535;
     end
     % 右边
     for j = top_edge-2:btm_edge+2
-        i = boundary(2, top_edge-3) + (j - top_edge + 3) / (btm_edge - top_edge + 6) * (boundary(2, btm_edge+3) - boundary(2, top_edge-3));
-        i = ceil(i);
-        i = max(i, 1);
-        i = min(i, width);
+        if abs(boundary(2, btm_edge+3) - boundary(2, top_edge-3)) < 100
+            i = boundary(2, top_edge-3) + (j - top_edge + 3) / (btm_edge - top_edge + 6) * (boundary(2, btm_edge+3) - boundary(2, top_edge-3));
+            i = ceil(i);
+            i = max(i, 1);
+            i = min(i, width);
+        else
+            i = max(boundary(2, btm_edge+3), boundary(2, top_edge-3));
+        end
         imageData(i: width, j) = 65535;
     end
 else
