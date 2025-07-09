@@ -1,5 +1,5 @@
 % 单个DR脏带去除
-function single_remove4data2(filepath)
+function single_remove4data1(filepath)
 
 % 从文件路径中提取文件名
 [~, filename, ~] = fileparts(filepath);
@@ -126,7 +126,7 @@ title(sprintf('处理后图像 (尺寸: %d x %d)', width, height));
 % 调整子图间距
 set(fig, 'Position', [180, 120, 1200, 600]); % 调整图窗大小
 
-output_path = fullfile('result2', [filename '_comparison.png']);
+output_path = fullfile('..\result1', [filename '_comparison.png']);
 saveas(fig, output_path);
 fprintf('处理结果已保存到: %s\n', output_path);
 
