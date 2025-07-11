@@ -52,7 +52,10 @@ int main() {
                 vector<uint16_t> inputData = readBinaryFile(entry.path(), expectedSize);
 
                 // 处理数据
-                vector<uint16_t> outputData = remove_belt(inputData, width, height);
+                uint16_t* input_ptr = inputData.data();
+                uint16_t* output_ptr = remove_belt(input_ptr, width, height);
+                vector<uint16_t> outputData(output_ptr, output_ptr + width * height);
+                delete[] output_ptr;
 
                 // 检查输出数据尺寸是否匹配
                 if (outputData.size() != expectedSize) {
