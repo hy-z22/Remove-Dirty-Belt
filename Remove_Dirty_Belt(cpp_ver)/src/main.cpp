@@ -53,13 +53,11 @@ int main() {
 
                 // 处理数据
                 uint16_t* input_ptr = inputData.data();
-                uint16_t* output_ptr = remove_belt(input_ptr, width, height);
-                vector<uint16_t> outputData(output_ptr, output_ptr + width * height);
-                delete[] output_ptr;
+                remove_belt(input_ptr, width, height);
 
                 // 检查输出数据尺寸是否匹配
-                if (outputData.size() != expectedSize) {
-                    throw runtime_error("输出数据尺寸(" + to_string(outputData.size()) + 
+                if (inputData.size() != expectedSize) {
+                    throw runtime_error("输出数据尺寸(" + to_string(inputData.size()) + 
                                            ")与输入尺寸(" + to_string(expectedSize) + ")不匹配");
                 }
                 
@@ -67,7 +65,7 @@ int main() {
                 path outputPath = outputDir / (entry.path().stem().string() + ".png");
 
                 // 保存为PNG图片
-                saveAsPng(outputData, width, height, outputPath);
+                saveAsPng(inputData, width, height, outputPath);
                 
                 processedCount++;
                 cout << "已处理: " << entry.path() << " (" << width << "x" << height 

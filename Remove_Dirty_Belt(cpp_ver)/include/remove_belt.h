@@ -2,4 +2,4 @@
 
 using namespace std;
 
-uint16_t* remove_belt(const uint16_t* initial_imageData, int width, int height);
+void remove_belt(uint16_t* imageData, int width, int height);

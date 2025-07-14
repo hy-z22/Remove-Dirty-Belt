@@ -5,13 +5,8 @@
 
 using namespace std;
 
-uint16_t* remove_belt(const uint16_t* initial_imageData, int width, int height) {
+void remove_belt(uint16_t* imageData, int width, int height) {
     // 分配必要数组
-    uint16_t* processed_imageData = new uint16_t[width * height];
-    memcpy(processed_imageData, initial_imageData, sizeof(uint16_t) * width * height);
-
-    bool* is_object = new bool[width * height]{};
-    bool* is_boundary = new bool[width * height]{};
     int* boundary_num = new int[height]{};
     int (*boundaries)[2] = new int[height][2];
     double* left_diff = new double[height]{};
@@ -19,32 +14,26 @@ uint16_t* remove_belt(const uint16_t* initial_imageData, int width, int height) 
     double* first_order = new double[height]{};
     double* multiply = new double[height]{};
 
-    // 计算 is_object, is_boundary, boundary_num, boundaries 一次完成
+    // 计算 boundary_num, boundaries
     for (int y = 0; y < height; y++) {
         int left = width, right = -1, boundary_counts = 0;
         int row_offset = y * width;
         for (int x = 0; x < width; x++) {
             int idx = row_offset + x;
-            is_object[idx] = (initial_imageData[idx] != 65535);
 
-            if (is_object[idx]) {
+            if (imageData[idx] != 65535) {
                 if (x < left) left = x;
                 if (x > right) right = x;
-            }
-        }
-
-        for (int x = 1; x < width - 1; x++) {
-            int idx = row_offset + x;
-            if (is_object[idx] && (!is_object[idx - 1] || !is_object[idx + 1])) {
-                is_boundary[idx] = true;
-                boundary_counts++;
+                if ((x != 0) && (x != width - 1) && ((imageData[idx - 1] == 65535) || (imageData[idx + 1] == 65535))) {
+                    boundary_counts++;
+                }
             }
         }
         boundary_num[y] = boundary_counts;
         boundaries[y][0] = (left != width) ? left : -1;
         boundaries[y][1] = (right != -1) ? right : -1;
     }
-
+    
     // 计算一阶导数
     for (int y = 1; y < height; y++) {
         if (boundaries[y][0] != -1 && boundaries[y - 1][0] != -1)
@@ -98,8 +87,8 @@ uint16_t* remove_belt(const uint16_t* initial_imageData, int width, int height) 
     auto clip = [&](int y_from, int y_to, int left, int right) {
         for (int y = y_from; y <= y_to && y < height; y++) {
             int row_offset = y * width;
-            for (int x = 0; x <= left && x < width; x++) processed_imageData[row_offset + x] = 65535;
-            for (int x = right; x < width; x++) processed_imageData[row_offset + x] = 65535;
+            for (int x = 0; x <= left && x < width; x++) imageData[row_offset + x] = 65535;
+            for (int x = right; x < width; x++) imageData[row_offset + x] = 65535;
         }
     };
 
@@ -114,14 +103,10 @@ uint16_t* remove_belt(const uint16_t* initial_imageData, int width, int height) 
     }
 
     // 释放内存
-    delete[] is_object;
-    delete[] is_boundary;
     delete[] boundary_num;
     delete[] boundaries;
     delete[] left_diff;
     delete[] right_diff;
     delete[] first_order;
     delete[] multiply;
-
-    return processed_imageData;
 }
