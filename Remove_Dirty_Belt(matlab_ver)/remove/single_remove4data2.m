@@ -1,8 +1,5 @@
-% DR脏带去除
-clc; clear; close all;
-
-% 文件路径
-filepath = '..\data1\006218_1800x732.raw';
+% 单个DR脏带去除
+function single_remove4data2(filepath)
 
 % 从文件路径中提取文件名
 [~, filename, ~] = fileparts(filepath);
@@ -30,8 +27,11 @@ end
 imageData = fread(fid, [width, height], 'uint16');
 fclose(fid);
 
-% 显示原始图像
-figure;
+% 创建图窗
+fig = figure('Visible', 'off');
+
+% 显示原始灰度图
+subplot(1,2,1);
 imshow(imageData', []);
 colormap gray;
 title(sprintf('原始图像 (尺寸: %d x %d)', width, height));
@@ -46,21 +46,7 @@ for j = 1:height
                  (is_object(3:end, j) == 0)); % 右0
 end
 
-% 显示可能的边界
-figure;
-imshow(is_boundary', []);
-colormap gray;
-title(sprintf('可能的边界 (尺寸: %d x %d)', width, height));
-
 boundary_num = sum(is_boundary);
-
-% 边界数随纵坐标的变化
-figure;
-plot(1:height, boundary_num, 'r-', 'LineWidth', 2);
-xlabel('y');
-ylabel('boundary_num');
-title('边界数随纵坐标的变化');
-grid on;
 
 % 左右极限位置
 boundary = zeros(2, height);
@@ -83,22 +69,6 @@ first_order = abs(left_first_order) + abs(right_first_order);
 
 % 边界数与一阶导的乘积
 multiply = boundary_num .* first_order;
-
-% 一阶导随纵坐标的变化
-figure;
-plot(1:height, first_order, 'r-', 'LineWidth', 2);
-xlabel('y');
-ylabel('一阶导');
-title('一阶导随纵坐标的变化');
-grid on;
-
-% 乘积随纵坐标的变化
-figure;
-plot(1:height, multiply, 'r-', 'LineWidth', 2);
-xlabel('y');
-ylabel('乘积');
-title('乘积随纵坐标的变化');
-grid on;
 
 % 找到一个脏带范围内的纵坐标
 pin = find(multiply == max(multiply));
@@ -147,8 +117,17 @@ else
     end
 end
 
-% 显示处理后图像
-figure;
+% 显示处理后的灰度图
+subplot(1,2,2);
 imshow(imageData', []);
 colormap gray;
 title(sprintf('处理后图像 (尺寸: %d x %d)', width, height));
+
+% 调整子图间距
+set(fig, 'Position', [180, 120, 1200, 600]); % 调整图窗大小
+
+output_path = fullfile('..\..\result2', [filename '_comparison.png']);
+saveas(fig, output_path);
+fprintf('处理结果已保存到: %s\n', output_path);
+
+end
