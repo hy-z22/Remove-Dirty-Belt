@@ -7,6 +7,7 @@
 #include <iostream>
 #include <fstream>
 #include <cstdint>
+#include <cmath>
 
 namespace fs = filesystem;
 using namespace fs;
@@ -52,20 +53,32 @@ int main() {
                 vector<uint16_t> inputData = readBinaryFile(entry.path(), expectedSize);
 
                 // 处理数据
-                uint16_t* input_ptr = inputData.data();
-                remove_belt(input_ptr, width, height);
-
-                // 检查输出数据尺寸是否匹配
-                if (inputData.size() != expectedSize) {
-                    throw runtime_error("输出数据尺寸(" + to_string(inputData.size()) + 
-                                           ")与输入尺寸(" + to_string(expectedSize) + ")不匹配");
+                int fraction_height = 200; // 设置为height即是不分割
+                int step = fraction_height / 2;
+                int front = step / 2;
+                int back = step * (static_cast<int>(ceil(static_cast<double>(height) / step)) + 1) - front - height;
+                vector<uint16_t> inputData_augmented;
+                inputData_augmented.insert(inputData_augmented.end(), width * front, 65535);
+                inputData_augmented.insert(inputData_augmented.end(), inputData.begin(), inputData.end());
+                inputData_augmented.insert(inputData_augmented.end(), width * back, 65535);
+                vector<uint16_t> outputData_augmented = inputData_augmented;
+                uint16_t* input_ptr_augmented = inputData_augmented.data();
+                uint16_t* output_ptr_augmented = outputData_augmented.data();
+                for (int i = 0; i < static_cast<int>(ceil(static_cast<double>(height) / step)); i++) {
+                    remove_belt(input_ptr_augmented + i * step * width, output_ptr_augmented + i * step * width, width, fraction_height);
                 }
-                
+                vector<uint16_t> outputData = vector<uint16_t>(outputData_augmented.begin() + width * front, outputData_augmented.begin() + width * front + width * height);
+                if (outputData.size() != expectedSize) {
+                    cerr << "Error: outputData size incorrect! Got "
+                            << outputData.size() << ", expected " << expectedSize << "\n";
+                    exit(1);
+                }
+
                 // 构造输出文件名（将.raw替换为.png）
                 path outputPath = outputDir / (entry.path().stem().string() + ".png");
 
                 // 保存为PNG图片
-                saveAsPng(inputData, width, height, outputPath);
+                saveAsPng(outputData, width, height, outputPath);
                 
                 processedCount++;
                 cout << "已处理: " << entry.path() << " (" << width << "x" << height 

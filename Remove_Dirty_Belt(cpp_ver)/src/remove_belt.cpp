@@ -5,108 +5,130 @@
 
 using namespace std;
 
-void remove_belt(uint16_t* imageData, int width, int height) {
-    // 分配必要数组
+void remove_belt(const uint16_t* imageData, uint16_t* imageData_processed, int width, int height) {
+    const uint16_t BACKGROUND = 65535;
+    
+    // 分配所有需要的数组
     int* boundary_num = new int[height]{};
-    int (*boundaries)[2] = new int[height][2];
-    double* left_diff = new double[height]{};
-    double* right_diff = new double[height]{};
+    int (*boundaries)[2] = new int[height][2]{};
+    double* mean_pos = new double[height]{};
+    double* diff = new double[height]{};
     double* first_order = new double[height]{};
-    double* multiply = new double[height]{};
+    double* delta = new double[height]{};
+    bool* filtered_indices = new bool[height]{};
 
-    // 计算 boundary_num, boundaries
+    // 同时计算boundary_num,boundaries,delta
     for (int y = 0; y < height; y++) {
         int left = width, right = -1, boundary_counts = 0;
         int row_offset = y * width;
+        
         for (int x = 0; x < width; x++) {
             int idx = row_offset + x;
 
-            if (imageData[idx] != 65535) {
+            if (imageData[idx] != BACKGROUND) {
                 if (x < left) left = x;
                 if (x > right) right = x;
-                if ((x != 0) && (x != width - 1) && ((imageData[idx - 1] == 65535) || (imageData[idx + 1] == 65535))) {
+                if ((x > 0) && (x < width - 1) && ((imageData[idx - 1] == BACKGROUND) || (imageData[idx + 1] == BACKGROUND))) {
                     boundary_counts++;
                 }
             }
         }
+        
         boundary_num[y] = boundary_counts;
         boundaries[y][0] = (left != width) ? left : -1;
         boundaries[y][1] = (right != -1) ? right : -1;
+        mean_pos[y] = (boundaries[y][0] + boundaries[y][1]) / 2;
+        if (boundaries[y][0] != -1 && boundaries[y][1] != -1)
+            delta[y] = boundaries[y][1] - boundaries[y][0];
     }
-    
+
     // 计算一阶导数
     for (int y = 1; y < height; y++) {
-        if (boundaries[y][0] != -1 && boundaries[y - 1][0] != -1)
-            left_diff[y] = boundaries[y][0] - boundaries[y - 1][0];
-        if (boundaries[y][1] != -1 && boundaries[y - 1][1] != -1)
-            right_diff[y] = boundaries[y][1] - boundaries[y - 1][1];
+        if (mean_pos[y] != -1 && mean_pos[y - 1] != -1)
+            diff[y] = mean_pos[y] - mean_pos[y - 1];
     }
 
     for (int y = 1; y < height - 1; y++) {
-        double l_avg = (left_diff[y] + left_diff[y + 1]) * 0.5;
-        double r_avg = (right_diff[y] + right_diff[y + 1]) * 0.5;
-        first_order[y] = fabs(l_avg) + fabs(r_avg);
+        first_order[y] = (fabs(diff[y]) + fabs(diff[y + 1])) / 2;
     }
 
-    // 计算 multiply 并定位脏带
-    int pin = -1;
-    double max_val = -1;
+    double mean_delta = 0;
+    int count = 0;
+    double max_first_order = 0;
+    int inf = -1, sup = -1;
+    
+    // 计算平均物体宽度（只计入边界数大于10的）和最大一阶导数
     for (int y = 0; y < height; y++) {
-        multiply[y] = boundary_num[y] * first_order[y];
-        if (multiply[y] > max_val) {
-            max_val = multiply[y];
-            pin = y;
+        if (boundary_num[y] < 10 && delta[y] > 0) {
+            mean_delta += delta[y];
+            count++;
+        }
+        if (first_order[y] > max_first_order) {
+            max_first_order = first_order[y];
+        }
+        if (boundary_num[y] > 0) {
+            if (inf == -1) inf = y;
+            sup = y;
+        }
+    }
+    mean_delta = (count > 0) ? mean_delta / count : 0;
+
+    // 检测脏带区域
+    for (int y = 0; y < height; y++) {
+        // 条件1: 一阶导数较大且宽度异常
+        bool condition1 = (first_order[y] > 0.25 * max_first_order) && 
+                         (delta[y] > 1.15 * mean_delta);
+        
+        // 条件2: 当前无边界但前后有边界
+        bool condition2 = (boundary_num[y] == 0) && y > inf && y < sup;
+        
+        filtered_indices[y] = condition1 || condition2;
+    }
+
+    // 确定脏带上下边界
+    int top = -1, btm = -1;
+    for (int y = 0; y < height; y++) {
+        if (filtered_indices[y]) {
+            if (top == -1) top = y;
+            btm = y;
         }
     }
 
-    // 定位上下边界
-    int top_edge = -1, btm_edge = -1;
-    for (int y = pin; y >= 15; y--) {
-        bool cond1 = true, cond2a = true, cond2b = true;
-        for (int i = y - 15; i < y && i >= 0; i++) if (multiply[i] >= 100) cond1 = false;
-        for (int i = y - 7; i < y && i >= 0; i++) if (boundary_num[i] != 2) cond2a = false;
-        for (int i = y - 5; i < y && i >= 0; i++) if (multiply[i] >= 100) cond2b = false;
-        if (cond1 || (cond2a && cond2b)) {
-            top_edge = y;
-            break;
-        }
-    }
-
-    for (int y = pin; y < height - 15; y++) {
-        bool cond1 = true, cond2a = true, cond2b = true;
-        for (int i = y + 1; i <= y + 15 && i < height; i++) if (multiply[i] >= 100) cond1 = false;
-        for (int i = y + 1; i <= y + 7 && i < height; i++) if (boundary_num[i] != 2) cond2a = false;
-        for (int i = y + 1; i <= y + 5 && i < height; i++) if (multiply[i] >= 100) cond2b = false;
-        if (cond1 || (cond2a && cond2b)) {
-            btm_edge = y;
-            break;
-        }
-    }
-
-    // 消除脏带
-    auto clip = [&](int y_from, int y_to, int left, int right) {
+    // 处理脏带区域
+    auto clear_region = [&](int y_from, int y_to, int left, int right) {
         for (int y = y_from; y <= y_to && y < height; y++) {
-            int row_offset = y * width;
-            for (int x = 0; x <= left && x < width; x++) imageData[row_offset + x] = 65535;
-            for (int x = right; x < width; x++) imageData[row_offset + x] = 65535;
+           int row_offset = y * width;
+            for (int x = 0; x <= left && x < width; x++) imageData_processed[row_offset + x] = BACKGROUND;
+            for (int x = right; x < width; x++) imageData_processed[row_offset + x] = BACKGROUND;
         }
     };
 
-    if (top_edge != -1 && btm_edge != -1 && top_edge >= 3 && btm_edge + 3 < height) {
-        int left = min(boundaries[btm_edge + 3][0], boundaries[top_edge - 3][0]);
-        int right = max(boundaries[btm_edge + 3][1], boundaries[top_edge - 3][1]);
-        clip(top_edge - 2, btm_edge + 2, left, right);
-    } else if (top_edge == -1 && btm_edge != -1 && btm_edge + 3 < height) {
-        clip(0, btm_edge + 2, boundaries[btm_edge + 3][0], boundaries[btm_edge + 3][1]);
-    } else if (top_edge != -1 && btm_edge == -1 && top_edge >= 3) {
-        clip(top_edge - 2, height - 1, boundaries[top_edge - 3][0], boundaries[top_edge - 3][1]);
+    if (top != -1 && btm != -1) {
+        if (boundary_num[0] == 0) {
+            int left = boundaries[min(btm+1,height-1)][0];
+            int right = boundaries[min(btm+1,height-1)][1];
+            clear_region(height/4, min(btm,height*3/4  - 1), left, right);
+        }
+        
+        if (boundary_num[height-1] == 0) {
+            int left = boundaries[max(top-1,0)][0];
+            int right = boundaries[max(top-1,0)][1];
+            clear_region(max(top,height/4), height*3/4 - 1, left, right);
+        }
+        
+        if (boundary_num[0] != 0 && boundary_num[height-1] != 0) {
+            int left = min(boundaries[max(top-1,0)][0], boundaries[min(btm+1,height-1)][0]);
+            int right = max(boundaries[max(top-1,0)][1], boundaries[min(btm+1,height-1)][1]);
+            clear_region(max(top,height/4), min(btm,height*3/4  - 1), left, right);
+        }
     }
 
     // 释放内存
     delete[] boundary_num;
     delete[] boundaries;
-    delete[] left_diff;
-    delete[] right_diff;
+    delete[] mean_pos;
+    delete[] diff;
     delete[] first_order;
-    delete[] multiply;
+    delete[] delta;
+    delete[] filtered_indices;
 }
